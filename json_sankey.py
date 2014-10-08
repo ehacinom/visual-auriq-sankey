@@ -110,7 +110,7 @@ def db2json(credentials, name, browsers, operating):
 
 if __name__ == "__main__":
     credentials = ('localhost', 'root', 'kahasi', 'mydmp')
-    name = 'profiletest'
+    name = 'profile'
     headers = ["UserID", "convert", "timetoconvert", "duration_seen", 
                "events_total", "events_before_cv", "browser", 
                "fractionBrowser", "OS", "fractionOS", "browser_at_cv", 
