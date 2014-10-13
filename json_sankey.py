@@ -57,9 +57,10 @@ def db2json(credentials, name, browsers, operating):
                          user=MYSQL_USER, db=MYSQL_DB)
     cur = db.cursor()
 
-    def repeatcmd(cmd, name, var2, val2):
+    def repeatcmd(name, var1, val1, var2, val2):
         '''Return string value'''
-        cmd = cmd % (name, var2, val2)
+        cmd = 'SELECT COUNT(*) FROM %s WHERE conversion = 0 and %s = %s'
+        cmd = cmd % (name, var1, val1, var2, val2)
         cur.execute(cmd)
         return str(cur.fetchone()[0])
 
@@ -67,41 +68,50 @@ def db2json(credentials, name, browsers, operating):
     name    = scrub(name)
     outfile = name + '.json'
 
+    # variables
+    cv,  CV  = 'conversion', '1'
+    ncv, NCV = 'nonconversion', '0'
+
     # defaults
     links, nodes = [], []
 
-    # links var2 -> conversion nodes
-    con0 = 'SELECT COUNT(*) FROM %s WHERE conversion = 0 and %s = %s'
-    con1 = 'SELECT COUNT(*) FROM %s WHERE conversion = 1 and %s = %s'
-    nodes.append({"name":"conversion"})
-    nodes.append({"name":"nonconversion"})
+    # links between nodes
+    nodes.append({"name": cv})
+    nodes.append({"name": ncv})
     for b in browsers:
+        # browser to conversion and nonconversion
         var2 = 'browser'
-        link = {"source":browsers[b].lower(),
-                "target":"nonconversion",
-                "value":repeatcmd(con0, name, var2, b) }
+        link = {"source": browsers[b],
+                "target": ncv,
+                "value" : repeatcmd(name, cv, NCV, var2, b) }
         links.append(link)
-        link = {"source":browsers[b].lower(),
-                "target":"conversion",
-                "value":repeatcmd(con1, name, var2, b) }
+        link = {"source":browsers[b],
+                "target":cv,
+                "value":repeatcmd(name, cv, CV, var2, b) }
         links.append(link)
         
-        nodes.append({"name":browsers[b].lower()})
+        nodes.append({"name":browsers[b]})
+    var1 = 'browser'
     for os in operating:
+        # os to conversion and nonconversion
         var2 = 'OS'
-        link = {"source":operating[os].lower(),
-                "target":"nonconversion",
-                "value":repeatcmd(con0, name, var2, os) }
+        link = {"source": operating[os],
+                "target": cv,
+                "value" : repeatcmd(name, cv, CV, var2, os) }
         links.append(link)
-        link = {"source":operating[os].lower(),
-                "target":"conversion",
-                "value":repeatcmd(con1, name, var2, os) }
+        link = {"source": operating[os],
+                "target": ncv,
+                "value" : repeatcmd(name, cv, NCV, var2, os) }
         links.append(link)
         
-        nodes.append({"name":operating[os].lower()})
+        nodes.append({"name":operating[os]})
 
-    # links to get between operating --> browser
-    # later :D
+        # os to browser
+        for b in browsers:
+            link = {"source": operating[os],
+                    "target": browser[b]
+                    "value" : repeatcmd(name, var2, os, var1, b)}
+            links.append(link)
 
     # write to the dictionary and json
     linksandnodes = {"links":links, "nodes":nodes}
