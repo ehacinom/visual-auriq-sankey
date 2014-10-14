@@ -2,6 +2,7 @@ import MySQLdb
 #import csv
 #import sys
 import json
+import frogress
 
 def scrub(stmt):
     '''Helper function to scrub punctuation and whitespace from a string.
@@ -42,6 +43,7 @@ def csv2db(credentials, name):
     cur.execute(loader)
     db.commit()
     cur.close()
+    print 'Finished importing.'
 
 def tablecreator(credentials, name):
     '''Create a string SQL command to set the `creator` command in csv2db.'''
@@ -59,7 +61,7 @@ def db2json(credentials, name, browsers, operating):
 
     def repeatcmd(name, var1, val1, var2, val2):
         '''Return string value'''
-        cmd = 'SELECT COUNT(*) FROM %s WHERE conversion = 0 and %s = %s'
+        cmd = 'SELECT COUNT(*) FROM %s WHERE %s = %s and %s = %s'
         cmd = cmd % (name, var1, val1, var2, val2)
         cur.execute(cmd)
         return str(cur.fetchone()[0])
@@ -78,7 +80,8 @@ def db2json(credentials, name, browsers, operating):
     # links between nodes
     nodes.append({"name": cv})
     nodes.append({"name": ncv})
-    for b in browsers:
+    print 'Calculating browser to conversion links.'
+    for b in frogress.bar(browsers):
         # browser to conversion and nonconversion
         var2 = 'browser'
         link = {"source": browsers[b],
@@ -92,7 +95,8 @@ def db2json(credentials, name, browsers, operating):
         
         nodes.append({"name":browsers[b]})
     var1 = 'browser'
-    for os in operating:
+    print 'Calculating OS to conversion and browser links.'
+    for os in frogress.bar(operating):
         # os to conversion and nonconversion
         var2 = 'OS'
         link = {"source": operating[os],
@@ -109,11 +113,12 @@ def db2json(credentials, name, browsers, operating):
         # os to browser
         for b in browsers:
             link = {"source": operating[os],
-                    "target": browser[b]
+                    "target": browsers[b],
                     "value" : repeatcmd(name, var2, os, var1, b)}
             links.append(link)
 
     # write to the dictionary and json
+    print 'Writing to json.'
     linksandnodes = {"links":links, "nodes":nodes}
     with open(outfile, 'w') as f:
         json.dump(linksandnodes, f)
