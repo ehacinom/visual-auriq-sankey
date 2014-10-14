@@ -81,23 +81,10 @@ def db2json(credentials, name, browsers, operating):
     name    = scrub(name)
     outfile = name + '.json'
 
-    # variables
+    # variables, defaults
     cv,  CV  = 'conversion', '1'
     ncv, NCV = 'nonconversion', '0'
-
-    # defaults
-    #links, nclinks = [], []
     links = defaultdict(int)
-
-    # nodes
-    nodes = set()
-    nodes.add(cv)
-    nodes.add(ncv)
-    for b in browsers:
-        nodes.add(browsers[b])
-    for os in operating:
-        nodes.add(operating[os])
-    nodes = [{"name":n} for n in nodes]
 
     # os -> browser -> conversion
     print 'Converting data to links.'
@@ -111,14 +98,19 @@ def db2json(credentials, name, browsers, operating):
         # os to browser
         # differentiating by ncv/cv slows it down by 3 times
         for os in operating:
-            # os to browser if nonconversion or conversion
             links[operating[os], browsers[b]] += \
                             repeatcmd(name, 'OS', os, 'browser', b)
 
     # write to the dictionary and json
-    print '\nWriting to json.'
+    print '\nWriting nodes to json.'
+    nodes = set([s for (s,t), v in links.items() if v > 0])
+    nodes.add(cv)
+    nodes.add(ncv)
+    nodes = [{"name":n} for n in nodes]
+    print 'Writing links to json.'
     links = [{"source":s, "target":t, "value":v} for (s,t), v in 
              links.items() if v > 0]
+
     linksandnodes = {"links":links, "nodes":nodes}
     with open(outfile, 'w') as f:
         json.dump(linksandnodes, f)
