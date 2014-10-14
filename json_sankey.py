@@ -75,11 +75,11 @@ def db2json(credentials, name, browsers, operating):
     ncv, NCV = 'nonconversion', '0'
 
     # defaults
-    links, nodes = [], []
+    links, nodes = [], set()
 
     # links between nodes
-    nodes.append({"name": cv})
-    nodes.append({"name": ncv})
+    nodes.add(cv)
+    nodes.add(ncv)
     print 'Calculating browser to conversion links.'
     for b in frogress.bar(browsers):
         # browser to conversion and nonconversion
@@ -93,9 +93,9 @@ def db2json(credentials, name, browsers, operating):
                 "value":repeatcmd(name, cv, CV, var2, b) }
         links.append(link)
         
-        nodes.append({"name":browsers[b]})
+        nodes.add(browsers[b])
     var1 = 'browser'
-    print 'Calculating OS to conversion and browser links.'
+    print '\nCalculating OS to conversion and browser links.'
     for os in frogress.bar(operating):
         # os to conversion and nonconversion
         var2 = 'OS'
@@ -108,7 +108,7 @@ def db2json(credentials, name, browsers, operating):
                 "value" : repeatcmd(name, cv, NCV, var2, os) }
         links.append(link)
         
-        nodes.append({"name":operating[os]})
+        nodes.add(operating[os])
 
         # os to browser
         for b in browsers:
@@ -118,7 +118,8 @@ def db2json(credentials, name, browsers, operating):
             links.append(link)
 
     # write to the dictionary and json
-    print 'Writing to json.'
+    print '\nWriting to json.'
+    nodes = [{"name":n} for n in nodes]
     linksandnodes = {"links":links, "nodes":nodes}
     with open(outfile, 'w') as f:
         json.dump(linksandnodes, f)
