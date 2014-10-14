@@ -75,12 +75,19 @@ def db2json(credentials, name, browsers, operating):
     ncv, NCV = 'nonconversion', '0'
 
     # defaults
-    links, nodes = [], set()
+    links = []
 
-    # links between nodes
+    # nodes
+    nodes = set()
     nodes.add(cv)
     nodes.add(ncv)
-    print 'Calculating browser to conversion links.'
+    for b in browsers:
+        nodes.add(b)
+    for os in operating:
+        nodes.add(os)
+    nodes = [{"name":n} for n in nodes]
+
+    # os -> browser -> conversion
     for b in frogress.bar(browsers):
         # browser to conversion and nonconversion
         var2 = 'browser'
@@ -88,12 +95,18 @@ def db2json(credentials, name, browsers, operating):
                 "target": ncv,
                 "value" : repeatcmd(name, cv, NCV, var2, b) }
         links.append(link)
-        link = {"source":browsers[b],
-                "target":cv,
-                "value":repeatcmd(name, cv, CV, var2, b) }
+        link = {"source": browsers[b],
+                "target": cv,
+                "value" : repeatcmd(name, cv, CV, var2, b) }
         links.append(link)
-        
-        nodes.add(browsers[b])
+
+        # os to browser
+        for os in operating:
+            link = {"source": operating[os],
+                    "target": browsers[b],
+                    "value" : repeatcmd(name, var2, os, var1, b)}
+            links.append(link)
+
     var1 = 'browser'
     print '\nCalculating OS to conversion and browser links.'
     for os in frogress.bar(operating):
@@ -107,19 +120,9 @@ def db2json(credentials, name, browsers, operating):
                 "target": ncv,
                 "value" : repeatcmd(name, cv, NCV, var2, os) }
         links.append(link)
-        
-        nodes.add(operating[os])
-
-        # os to browser
-        for b in browsers:
-            link = {"source": operating[os],
-                    "target": browsers[b],
-                    "value" : repeatcmd(name, var2, os, var1, b)}
-            links.append(link)
 
     # write to the dictionary and json
     print '\nWriting to json.'
-    nodes = [{"name":n} for n in nodes]
     linksandnodes = {"links":links, "nodes":nodes}
     with open(outfile, 'w') as f:
         json.dump(linksandnodes, f)
