@@ -2,6 +2,7 @@ import MySQLdb
 #import csv
 #import sys
 import json
+from collections import defaultdict
 import frogress
 
 def scrub(stmt):
@@ -48,6 +49,7 @@ def csv2db(credentials, name):
 def tablecreator(credentials, name):
     '''Create a string SQL command to set the `creator` command in csv2db.'''
     (MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB) = credentials
+    # haven't written
     pass
 
 def db2json(credentials, name, browsers, operating):
@@ -59,12 +61,21 @@ def db2json(credentials, name, browsers, operating):
                          user=MYSQL_USER, db=MYSQL_DB)
     cur = db.cursor()
 
-    def repeatcmd(name, var1, val1, var2, val2):
-        '''Return string value'''
-        cmd = 'SELECT COUNT(*) FROM %s WHERE %s = %s and %s = %s'
-        cmd = cmd % (name, var1, val1, var2, val2)
+    def repeatcmd(name, *args):
+        '''Return int count value.
+        Create the command by adding together strings.
+        '''
+        cmd = 'SELECT COUNT(*) FROM %s' % name
+        n = len(args)
+
+        if n/2: cmd += ' WHERE '
+        for i in xrange(n):
+            if i % 2: continue
+            if i != 0: cmd += 'and '
+            cmd += '%s = %s ' % (args[i], args[i+1])
+
         cur.execute(cmd)
-        return str(cur.fetchone()[0])
+        return cur.fetchone()[0]
 
     # strings
     name    = scrub(name)
@@ -75,54 +86,39 @@ def db2json(credentials, name, browsers, operating):
     ncv, NCV = 'nonconversion', '0'
 
     # defaults
-    links = []
+    #links, nclinks = [], []
+    links = defaultdict(int)
 
     # nodes
     nodes = set()
     nodes.add(cv)
     nodes.add(ncv)
     for b in browsers:
-        nodes.add(b)
+        nodes.add(browsers[b])
     for os in operating:
-        nodes.add(os)
+        nodes.add(operating[os])
     nodes = [{"name":n} for n in nodes]
 
     # os -> browser -> conversion
+    print 'Converting data to links.'
     for b in frogress.bar(browsers):
-        # browser to conversion and nonconversion
-        var2 = 'browser'
-        link = {"source": browsers[b],
-                "target": ncv,
-                "value" : repeatcmd(name, cv, NCV, var2, b) }
-        links.append(link)
-        link = {"source": browsers[b],
-                "target": cv,
-                "value" : repeatcmd(name, cv, CV, var2, b) }
-        links.append(link)
+        # browser to nonconversion
+        links[browsers[b], ncv] += repeatcmd(name, cv, NCV, 'browser', b)
+
+        # browser to conversion
+        links[browsers[b], cv] += repeatcmd(name, cv, CV, 'browser', b)
 
         # os to browser
+        # differentiating by ncv/cv slows it down by 3 times
         for os in operating:
-            link = {"source": operating[os],
-                    "target": browsers[b],
-                    "value" : repeatcmd(name, var2, os, var1, b)}
-            links.append(link)
-
-    var1 = 'browser'
-    print '\nCalculating OS to conversion and browser links.'
-    for os in frogress.bar(operating):
-        # os to conversion and nonconversion
-        var2 = 'OS'
-        link = {"source": operating[os],
-                "target": cv,
-                "value" : repeatcmd(name, cv, CV, var2, os) }
-        links.append(link)
-        link = {"source": operating[os],
-                "target": ncv,
-                "value" : repeatcmd(name, cv, NCV, var2, os) }
-        links.append(link)
+            # os to browser if nonconversion or conversion
+            links[operating[os], browsers[b]] += \
+                            repeatcmd(name, 'OS', os, 'browser', b)
 
     # write to the dictionary and json
     print '\nWriting to json.'
+    links = [{"source":s, "target":t, "value":v} for (s,t), v in 
+             links.items() if v > 0]
     linksandnodes = {"links":links, "nodes":nodes}
     with open(outfile, 'w') as f:
         json.dump(linksandnodes, f)
@@ -146,7 +142,7 @@ if __name__ == "__main__":
                   7:'MAC', 23:'MAC', 0:'Unknown', 19:'windows phone'}
 
     # import data to database
-    csv2db(credentials, name)
+    #csv2db(credentials, name)
     
     # get data output
     db2json(credentials, name, browsers, operating)
