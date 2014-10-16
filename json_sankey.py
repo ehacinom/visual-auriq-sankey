@@ -1,9 +1,10 @@
 import MySQLdb
 #import csv
-#import sys
+import sys
 import json
 from collections import defaultdict
 import frogress
+import time
 
 def scrub(stmt):
     '''Helper function to scrub punctuation and whitespace from a string.
@@ -69,7 +70,7 @@ def db2json(credentials, name, browsers, operating):
         n = len(args)
 
         if n/2: cmd += ' WHERE '
-        for i in xrange(n):
+        for i in xrange(n): # this makes me unhappy
             if i % 2: continue
             if i != 0: cmd += 'and '
             cmd += '%s = %s ' % (args[i], args[i+1])
@@ -82,38 +83,64 @@ def db2json(credentials, name, browsers, operating):
     outfile = name + '.json'
 
     # variables, defaults
-    cv,  CV  = 'conversion', '1'
-    ncv, NCV = 'nonconversion', '0'
-    links = defaultdict(int)
+    cv,  CV,  conversion,    outcv  = 'conversion',    '1', defaultdict(int), name + 'ncv.json'
+    ncv, NCV, nonconversion, outncv = 'nonconversion', '0', defaultdict(int), name + 'cv.json'
+
+    # distinguishing
+    s = ' ' # ncv has addl variable s
 
     # os -> browser -> conversion
     print 'Converting data to links.'
     for b in frogress.bar(browsers):
         # browser to nonconversion
-        links[browsers[b], ncv] += repeatcmd(name, cv, NCV, 'browser', b)
+        nonconversion[browsers[b]+s, ncv] += repeatcmd(name, cv, NCV, 'browser', b)
 
         # browser to conversion
-        links[browsers[b], cv] += repeatcmd(name, cv, CV, 'browser', b)
+        conversion[browsers[b], cv] += repeatcmd(name, cv, CV, 'browser', b)
 
         # os to browser
         # differentiating by ncv/cv slows it down by 3 times
         for os in operating:
-            links[operating[os], browsers[b]] += \
-                            repeatcmd(name, 'OS', os, 'browser', b)
+            # os to browser to nonconversion
+            nonconversion[operating[os]+s+browsers[b][0], browsers[b]+s] += \
+                            repeatcmd(name, 'OS', os, 'browser', b, cv, NCV)
+            # os to browser to conversion
+            conversion[operating[os]+browsers[b][0], browsers[b]] += \
+                            repeatcmd(name, 'OS', os, 'browser', b, cv, CV)
 
     # write to the dictionary and json
     print '\nWriting nodes to json.'
-    nodes = set([s for (s,t), v in links.items() if v > 0])
-    nodes.add(cv)
-    nodes.add(ncv)
-    nodes = [{"name":n} for n in nodes]
-    print 'Writing links to json.'
-    links = [{"source":s, "target":t, "value":v} for (s,t), v in 
-             links.items() if v > 0]
+    
+    def nodemaker(links, extra=[]):
+        '''Convert integer 2-keyed links dictionary to nodes list.
+        Optional extra (SINGLE) parameter to add.'''
+        nodes = [s for (s,t), v in links.items() if v > 0]
+        nodes.append(extra)
+        nodes = set(nodes)
+        return [{"name":n} for n in nodes]
 
-    linksandnodes = {"links":links, "nodes":nodes}
-    with open(outfile, 'w') as f:
-        json.dump(linksandnodes, f)
+    nodesncv = nodemaker(nonconversion, ncv)
+    nodescv  = nodemaker(conversion, cv)
+    nodes    = nodesncv + nodescv
+
+    print 'Writing links to json.'
+    def linkmaker(links):
+        '''Convert integer 2-keyed links dictionary to links list'''
+        return [{"source":s, "target":t, "value":v} for (s,t), v in links.items() if v > 0]
+
+    linksncv = linkmaker(nonconversion)
+    linkscv  = linkmaker(conversion)
+    links    = linksncv + linkscv
+
+    def writejson(links, nodes, outfile):
+        '''lol so much repeating and helper functions'''
+        linksandnodes = {"links":links, "nodes":nodes}
+        with open(outfile, 'w') as f:
+            json.dump(linksandnodes, f)
+
+    #writejson(linksncv, nodesncv, outncv)
+    #writejson(linkscv, nodescv, outcv)
+    writejson(links, nodes, outfile)
 
 if __name__ == "__main__":
     credentials = ('localhost', 'root', 'kahasi', 'mydmp')
@@ -137,5 +164,7 @@ if __name__ == "__main__":
     #csv2db(credentials, name)
     
     # get data output
+    t = time.clock()
     db2json(credentials, name, browsers, operating)
+    print time.clock()-t, 's'
     
