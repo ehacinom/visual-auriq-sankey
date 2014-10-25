@@ -11,7 +11,7 @@ d3.sankey = function() {
     nodeWidth = +_;
     return sankey;
   };
- 
+
   sankey.nodePadding = function(_) {
     if (!arguments.length) return nodePadding;
     nodePadding = +_;
