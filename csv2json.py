@@ -1,4 +1,4 @@
-import MySQLdb
+import MySQLdb  # Server version: 5.5.40 MySQL Community Server (GPL)
 import _mysql_exceptions
 #http://sourceforge.net/p/mysql-python/discussion/70461/thread/21fb6268/
 import os
@@ -124,9 +124,15 @@ class JSONfun(object):
             if num_chars > 0:
                 valid_columns += 1
         if valid_columns == self.n:
-            self.cols = header
+            # backticks for reserved words, see below
+            self.cols = ['`'+c+'`' for c in header]
         else:
             self.cols = ['C'+str(i) for i in xrange(self.n)]
+
+        # I hate the problem of reserved words
+        # mysql 5.5.40 for me
+        # should use sets to check for matches and remove, but I'm just
+        # going to assume backticks and intelligent mysql database users
 
         # okay, iteratively create this SQL command `creator`
         middle = ' TEXT, '.join(self.cols)
@@ -171,19 +177,22 @@ class JSONfun(object):
         try: 
             self.cur.execute(creator)
         except _mysql_exceptions.ProgrammingError as e:
+            defaultfail = ('The default creator command failed. Sorry.\n'
+                           'Check the csv2json.py file or your command for '
+                           'column names that are RESERVED WORDS for the '
+                           'MySQL server.\nThe command used was:\n\t%s' 
+                           % creator)
             if ans:
-                print 'Your creator command failed. It was: '
-                print '\t', creator
+                print 'Your creator command failed. It was:\n\t', creator
+                print 'Probably due to: reserved words w/out backticks.'
                 print 'Now using default table creator.'
                 try: 
                     self.cur.execute(self.tablecreator())
                 except _mysql_exceptions.ProgrammingError as e:
-                    print 'The default creator command failed. Sorry.'
+                    print e, defaultfail
                     sys.exit() # woo segfaults :p
             else:
-                print 'The default creator command failed. Sorry.'
-                print 'It was:'
-                print '\t', repr(creator), '\n'
+                print e, defaultfail
                 sys.exit()
         # load csv file in.
         print 'Importing %s into the %s table.' \
