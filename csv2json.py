@@ -25,9 +25,11 @@ class JSONfun(object):
     ============
     
     from csv2json import JSONfun  
-    credentials = ($MYSQL_HOST, $MYSQL_USER, $MYSQL_PASSWORD, $MYSQL_DB)  
+    credentials = ($MYSQL_HOST, $MYSQL_USER, $MYSQL_PASSWORD, $MYSQL_DB) 
+    # localhost, root, password, mydmp 
     name = '$NAME'  
-    data = JSONfun(crednetials, name)
+    data = JSONfun(credentials, name)
+    data.tosankey()
       
     EXPLANATION
     ===========
@@ -75,6 +77,9 @@ class JSONfun(object):
             print 'Using data stored in database table %s' % self.name
 
         # we'll move db --> json in individual function calls
+
+        # outfile
+        self.jsonfile = self.name + '.json'
 
     def scrub(self, stmt):
         '''Helper function to scrub punctuation and whitespace from a string.
@@ -176,6 +181,7 @@ class JSONfun(object):
         # if bad default creator and ans = 1, then use default tablecreator()
         try: 
             self.cur.execute(creator)
+            print 'You used creator command: \n\t', creator
         except _mysql_exceptions.ProgrammingError as e:
             defaultfail = ('The default creator command failed. Sorry.\n'
                            'Check the csv2json.py file or your command for '
@@ -202,9 +208,125 @@ class JSONfun(object):
 
         # commit
         self.db.commit()
-        self.cur.close()
+        # self.cur.close() # don't close!
 
         return 1
+
+    def countcmd(self, *args):
+        '''Return the int count value.
+        Create the command by adding together strings.
+        '''
+        cmd = 'SELECT COUNT(*) FROM %s' % self.name
+        n = len(args)
+
+        # this makes me unhappy
+        if n/2: cmd += ' WHERE '
+        for i in xrange(n):
+            if i % 2: continue
+            if i != 0: cmd += 'and '
+            cmd += '%s = %s '% (args[i], args[i+1])
+
+        self.cur.execute(cmd)
+        return self.cur.fetchone()[0]
+
+    def profiletosankey(self, b):
+        '''the multiprocessed function call for work14
+        :param: b - browser we are dealing with
+        
+        This is so slow.
+        '''
+
+        # browser to nonconversion
+        self.nonconversion[self.browsers[b]+self.s, self.ncv[0]] += self.countcmd(self.cv[2], self.ncv[1], 'browser', b)
+        # browser to conversion
+        self.conversion[self.browsers[b], self.cv[0]] += self.countcmd(self.cv[2], self.cv[1], 'browser', b)
+
+        # os to browser; differentiating by ncv/cv slows it down by 3 times
+        for os in self.operating:
+            # os to browser to nonconversion
+            self.nonconversion[self.operating[os]+self.s+self.browsers[b][0], self.browsers[b]+self.s] += self.countcmd('OS', os, 'browser', b, self.cv[2], self.ncv[1])
+            # os to browser to conversion
+            self.conversion[self.operating[os]+self.browsers[b][0], self.browsers[b]] += self.countcmd('OS', os, 'browser', b, self.cv[2], self.cv[1])
+
+    def nodemaker(self, links, extra=[]):
+        '''Convert integer 2-keyed links dictionary to nodes list.
+        Optional extra/single parameter to add to the node list'''
+        nodes = [s for (s,t), v in links.items() if v > 0]
+        nodes.append(extra)
+        nodes = set(nodes)
+        return [{"name": n} for n in nodes]
+
+    def linkmaker(self, links):
+        '''Convert integer 2-keyed links dictionary to links list'''
+        return [{"source":s, "target":t, "value":v} for (s,t), v in links.items() if v > 0]
+
+    def tosankey(self):
+        '''db to sankey json format.
+        needs to be multiprocessed'''
+
+        # define needed constants
+        self.constants()
+
+        # :( mp will thro a PicklingError
+        # PicklingError: Can't pickle <type 'instancemethod'>: attribute lookup __builtin__.instancemethod failed
+        # pool = mp.Pool(processes=4)
+        # pool.apply_async(self.profiletosankey, self.browsers)
+        # pool.close()
+        # pool.join()
+
+        print 'Counting needed values with database commands. Please wait.'
+        for b in frogress.bar(self.browsers):
+            self.profiletosankey(b)
+
+        # write to the dictionary and json
+        print '\nWriting nodes to json.'
+        nodesncv = self.nodemaker(self.nonconversion, self.ncv[0])
+        nodescv  = self.nodemaker(self.conversion, self.cv[0])
+        self.nodes = nodesncv + nodescv
+
+        print 'Writing links to json.'
+        linksncv = self.linkmaker(self.nonconversion)
+        linkscv  = self.linkmaker(self.conversion)
+        self.links = linksncv + linkscv
+        
+        print 'The final file is at %s' % self.jsonfile
+        def writejson(links, nodes, outfile):
+            '''lol so much repeating and helper functions'''
+            linksandnodes = {"links":links, "nodes":nodes}
+            with open(outfile, 'w') as f:
+                json.dump(linksandnodes, f)
+
+        writejson(self.links, self.nodes, self.jsonfile)
+
+    def constants(self):
+        '''defining the things we need for this particular implmentation, work14
+        should be automated but is not
+        '''
+
+        # these next two are from the profile we got from colin a few months ago
+        browsers = { 1:'IE', 2:'IE', 8:'IE', 9:'FF', 10:'SAFARI', 11:'IE', 12:'IE', 
+                     13:'CHROME', 14:'FF', 15:'FF', 16:'SAFARI', 17:'SAFARI', 
+                     18:'SAFARI', 19:'SAFARI', 20:'IE', 21:'FF', 25:'IE', 
+                     26:'SAFARI', 27:'SAFARI', 28:'SAFARI', 29:'IE', 30:'IE', 
+                     5:'NN', 22:'OPERA', 24:'OPERA' }
+        operating = { 0:'Unknown', 1:'WINDOWS', 2:'WINDOWS', 3:'WINDOWS', 4:'WINDOWS', 
+                      5:'WINDOWS', 6:'WINDOWS', 8:'WINDOWS', 9:'WINDOWS', 10:'iOS', 
+                      11:'iOS', 12:'iOS', 13:'android', 14:'android', 17:'android', 
+                      18:'android', 20:'android', 21:'android', 22:'WINDOWS', 
+                      7:'MAC', 23:'MAC',  19:'windows phone'}
+        self.browsers = browsers
+        self.operating = operating
+        
+        # [word, str(integer)]
+        self.cv  = ['conversion', '1', '`convert`']
+        self.ncv = ['nonconversion', '0']
+
+        # default storage
+        self.conversion = defaultdict(int)
+        self.nonconversion = defaultdict(int)
+
+        # distinguishing space
+        self.s = ' '
 
     def command(self):
         pass

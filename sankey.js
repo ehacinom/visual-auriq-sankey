@@ -254,6 +254,7 @@ d3.sankey = function() {
     }
   }
  
+  // sort links by depth...we want to sort by target node
   function computeLinkDepths() {
     nodes.forEach(function(node) {
       node.sourceLinks.sort(ascendingTargetDepth);
