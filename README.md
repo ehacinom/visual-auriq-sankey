@@ -1,4 +1,9 @@
+visual-auriq-sankey
+==============
+
 Using profile data from a month or so ago, viewing unique users to go to conversion or nonconversion. I haven't figured out how to make my ec2 instance work as a server yet so it's just an html file you can start your own server for :D
+
+Based off this: http://bost.ocks.org/mike/sankey/
 
 USAGE
 =====
